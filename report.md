@@ -9,19 +9,72 @@ The code is very similar to previous hw01.
 ### main.cpp
 ```
 
-```
-In main.cpp file, most of the code remain unchanged. I change the fifo to initiator for data transfering. 
-### testbench.cpp
-```
+Testbench tb("tb");
+SimpleBus<1, 1> bus("bus");
+bus.set_clock_period(sc_time(CLOCK_PERIOD, SC_NS));
+SobelFilter sobel_filter("sobel_filter");
+tb.initiator.i_skt(bus.t_skt[0]);
+bus.setDecode(0, SOBEL_MM_BASE, SOBEL_MM_BASE + SOBEL_MM_SIZE - 1); //Inheritance from memorymap
+bus.i_skt[0](sobel_filter.t_skt);
 
 ```
-Most of the code remains unchanges as hw01. I change fifo to data which will be sented to sobel module to do calculation. Then, I will read data to write new .bmp.
+In main.cpp file, we have to initialize bus interface. We bind initiator in testbench to target socket of bus and bind initiator socket to target socket of sobelfilter. Therefore, testbench can tesbench can transfer data to soblefilter via bus and vise versa. bus.setDecode is to set memory address for them to read/ write data.
+
+### SimpleBus.h
+```
+SimpleBus(sc_core::sc_module_name name, double clock_period_in_ps = 1000,
+          bool trace = false, bool masked = true)
+    : sc_core::sc_module(name), MemoryMap(name, NR_OF_INITIATOR_SOCKETS),
+      clock_period(clock_period_in_ps, sc_core::SC_PS), m_trace(trace),
+      m_is_address_masked(masked) {
+  for (unsigned int i = 0; i < NR_OF_TARGET_SOCKETS; ++i) {
+    t_skt[i].register_b_transport(this, &SimpleBus::initiatorBTransport, i); // define SocketId as i
+    t_skt[i].register_transport_dbg(this, &SimpleBus::transportDebug, i);
+    t_skt[i].register_get_direct_mem_ptr(this, &SimpleBus::getDMIPointer, i);
+  }
+  for (unsigned int i = 0; i < NR_OF_INITIATOR_SOCKETS; ++i) {
+    i_skt[i].register_invalidate_direct_mem_ptr(
+        this, &SimpleBus::invalidateDMIPointers, i);
+  }
+}
+```
+
+This is the constructor of bus. We want to bind our b_transport and other function to bus, so whenever we call b_transport it will automatically call our b_transport. 
+
+```
+unsigned int transportDebug(int SocketId, transaction_type &trans) {
+  Addr orig = trans.get_address();
+  Addr offset;
+  int portId = getPortId(orig, offset);
+
+  if (portId < 0) {
+    std::cout << "ERROR: " << name() << ": transportDebug()"
+              << ": Invalid (undefine memory mapped) address == "
+              << tshsu::print(trans.get_address()) << std::endl;
+    assert(false);
+  }
+
+  if (m_trace) {
+    printf("TLM: %s dbg decode:0x%llX -> i_skt[%d]\n", name(), orig, portId);
+  }
+  // It is a static port ?
+  initiator_socket_type *decodeSocket = &i_skt[portId];
+  if (m_is_address_masked) {
+    trans.set_address(offset);
+  }
+  return (*decodeSocket)->transport_dbg(trans);
+}
+
+```
+This is the b_transport functino we use in my program. First it will get corresponding portId from memorymap. Then, do error detection to avoid portId < 0. When we have correct portId we can get initiator and transfer data to next socket.
+
+### testbench.cpp
+
+Most of the code remains unchanges as hw01 and hw03.
 
 ### sobelfilter.cpp
-```
 
-```
-In SobelFilter.cpp, I changed the mask and the calculation process so that it can apply the mask on red, green, and blue separately, instead of merging those colors to gray in the previous process. I register blocking_transport function for TLMp2p.
+Most of the code remains unchanges as hw01 and hw03.
 
 
 # Additional features of your design and models
