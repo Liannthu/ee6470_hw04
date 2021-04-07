@@ -1,6 +1,6 @@
 # ee6470_hw04
 
-* Go to sobel_filter_bus_
+* Go to sobel_tlm_bus_
 * mkdir build
 * cmake ..
 * make
